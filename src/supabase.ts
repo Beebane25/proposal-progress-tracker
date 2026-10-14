@@ -1,7 +1,7 @@
 // Supabase client + sinkronisasi AppState <-> database.
 // Aktif hanya jika VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY di-set.
 // Jika tidak, aplikasi tetap berjalan local-first (localStorage/IndexedDB).
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient, type Session } from '@supabase/supabase-js';
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -256,5 +256,27 @@ export async function saveReadinessNow(itemIndex: number, checked: boolean) {
   const { error } = await supabase().from('readiness_checks').upsert({
     project_id: pid, item_index: itemIndex, checked,
   }, { onConflict: 'project_id,item_index' });
+  if (error) throw error;
+}
+
+// ---------- Auth (login-only; akun dibuat manual di dashboard Supabase) ----------
+
+export async function getSession(): Promise<Session | null> {
+  const { data } = await supabase().auth.getSession();
+  return data.session ?? null;
+}
+
+export function onAuthChange(cb: (s: Session | null) => void) {
+  const { data } = supabase().auth.onAuthStateChange((_e, s) => cb(s));
+  return data.subscription;
+}
+
+export async function signIn(email: string, password: string) {
+  const { error } = await supabase().auth.signInWithPassword({ email, password });
+  if (error) throw error;
+}
+
+export async function signOut() {
+  const { error } = await supabase().auth.signOut();
   if (error) throw error;
 }
