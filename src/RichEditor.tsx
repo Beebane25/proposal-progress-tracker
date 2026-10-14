@@ -28,9 +28,26 @@ function sanitizeHtml(html: string): string {
   temp.innerHTML = html;
   temp.querySelectorAll('script, iframe, object, embed, style, link, meta').forEach(el => el.remove());
   temp.querySelectorAll('*').forEach(el => {
+    // Remove dangerous attributes
     Array.from(el.attributes).forEach(attr => {
       if (attr.name.toLowerCase().startsWith('on') || attr.name === 'srcdoc') el.removeAttribute(attr.name);
     });
+    // Strip background colors from inline styles (paste cleanup)
+    if (el instanceof HTMLElement && el.style.backgroundColor) {
+      el.style.backgroundColor = '';
+    }
+    if (el instanceof HTMLElement && el.style.background) {
+      el.style.background = '';
+    }
+  });
+  // Remove orphaned list items (causes black dots)
+  temp.querySelectorAll('li').forEach(li => {
+    const parent = li.parentElement;
+    if (!parent || (parent.tagName !== 'UL' && parent.tagName !== 'OL')) {
+      // Unwrap orphaned li
+      while (li.firstChild) parent?.insertBefore(li.firstChild, li);
+      li.remove();
+    }
   });
   return temp.innerHTML;
 }
@@ -135,12 +152,25 @@ export function RichEditor({ value, onChange, placeholder }: RichEditorProps) {
   };
 
   const applyColor = (color: string) => {
-    exec('foreColor', color);
+    if (color === 'auto') {
+      // Remove inline color style to use CSS default (black/white based on dark mode)
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        exec('removeFormat');
+      }
+    } else {
+      exec('foreColor', color);
+    }
     setShowColorMenu(false);
   };
 
   const applyHighlight = (color: string) => {
-    exec('backColor', color);
+    if (color === 'auto') {
+      // Remove background color
+      exec('backColor', 'transparent');
+    } else {
+      exec('backColor', color);
+    }
     setShowHighlightMenu(false);
   };
 
@@ -214,6 +244,7 @@ export function RichEditor({ value, onChange, placeholder }: RichEditorProps) {
               </button>
               {showColorMenu && (
                 <div className="ribbon-menu color-grid">
+                  <button type="button" onClick={() => applyColor('auto')} style={{ background: 'linear-gradient(135deg, #1a1a1a 50%, #e4ebf5 50%)', border: '2px solid var(--mint)' }} className="color-swatch" title="Automatic (otomatis hitam/putih)" />
                   {COLORS.map(c => (
                     <button key={c} type="button" onClick={() => applyColor(c)} style={{ background: c }} className="color-swatch" aria-label={`Warna ${c}`} />
                   ))}
@@ -227,6 +258,7 @@ export function RichEditor({ value, onChange, placeholder }: RichEditorProps) {
               </button>
               {showHighlightMenu && (
                 <div className="ribbon-menu color-grid">
+                  <button type="button" onClick={() => applyHighlight('auto')} style={{ background: 'transparent', border: '2px solid var(--mint)' }} className="color-swatch" title="Tidak ada highlight" />
                   {HIGHLIGHTS.map(c => (
                     <button key={c} type="button" onClick={() => applyHighlight(c)} style={{ background: c }} className="color-swatch" aria-label={`Highlight ${c}`} />
                   ))}
