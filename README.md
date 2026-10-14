@@ -27,6 +27,33 @@ npm run dev
 
 Open http://localhost:5173.
 
+## Cloud sync dengan Supabase (opsional)
+
+Aplikasi tetap berfungsi penuh secara local-first tanpa Supabase. Untuk mengaktifkan sinkronisasi cloud:
+
+1. Buat project di [supabase.com](https://supabase.com) (gratis).
+2. Di dashboard Supabase, buka **SQL Editor** lalu jalankan isi file:
+   - `supabase/migrations/001_schema.sql` — membuat tabel, index, RLS policy, dan trigger.
+   - `supabase/migrations/002_seed.sql` — mengisi data awal (task, member, chapter, policy, metrik) sesuai seed aplikasi.
+   - `supabase/migrations/003_anon_access.sql` — **wajib jika aplikasi dipakai tanpa login** (misalnya hosting statis publik). Membuka akses baca/tulis untuk role `anon`. Siapa pun dengan anon key bisa mengubah data; jangan simpan rahasia di tracker.
+3. Salin `.env.example` menjadi `.env` dan isi:
+   - `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY` dari **Project Settings > API**.
+   - `VITE_SUPABASE_PROJECT_ID` dengan `id` baris di tabel `public.projects` (lihat hasil seed di Table Editor).
+4. `npm run dev` — panel **Settings > Cloud sync** akan menampilkan status koneksi.
+
+### Deploy ke Vercel
+
+`.env` sudah ter-gitignore dan tidak akan ter-push ke GitHub. Untuk hosting publik, tambahkan ketiga variabel `VITE_SUPABASE_*` di **Vercel Dashboard → Project → Settings → Environment Variables**, lalu redeploy. Vite meng-inline env saat build, jadi env lokal tidak ikut terbawa otomatis.
+
+### Mode akses
+
+- **Tanpa login (default saat ini):** jalankan `003_anon_access.sql`; semua device membaca/menulis project yang sama.
+- **Dengan login (opsional, lebih privat):** lewati `003_anon_access.sql`, aktifkan Email auth, dan gunakan policy bawaan `001_schema.sql` (owner + `project_collaborators`).
+
+## Data boundary
+
+Mode default single-user/local: state disimpan di browser (localStorage + IndexedDB). Jika Supabase diaktifkan, state juga di-upsert ke tabel-tabel di atas dengan debounce 300ms. Tidak ada telemetry tersembunyi atau panggilan AI eksternal.
+
 ## Verify
 
 ```bash
@@ -34,10 +61,6 @@ npm run build
 npm test -- --environment jsdom
 npm audit --audit-level=moderate
 ```
-
-## Data boundary
-
-The current version is single-user/local. Core state is stored in the browser. No hidden telemetry or external AI calls are included. Literature records and experiment results must be entered by the user; the app does not fabricate or infer verified research results.
 
 ## License
 
