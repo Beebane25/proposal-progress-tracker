@@ -200,3 +200,61 @@ export async function createProject(title: string) {
   if (error) throw error;
   return data.id as string;
 }
+
+// ---------- Granular save per entitas (dipakai tombol Simpan manual) ----------
+
+function activeProjectId(): string {
+  return (import.meta.env.VITE_SUPABASE_PROJECT_ID as string | undefined) || '';
+}
+
+export async function saveChapterNow(ch: any) {
+  const pid = activeProjectId(); if (!pid) return;
+  const { error } = await supabase().from('chapters').upsert({
+    project_id: pid, client_id: ch.id, label: ch.label ?? '', title: ch.title ?? '',
+    purpose: ch.purpose ?? '', status: ch.status ?? 'Belum Ditulis', draft: ch.draft ?? '',
+    checklist: ch.checklist ?? [], comment: ch.comment ?? '',
+  }, { onConflict: 'project_id,client_id' });
+  if (error) throw error;
+}
+
+export async function saveTaskNow(t: any, sortOrder = 0) {
+  const pid = activeProjectId(); if (!pid) return;
+  const { error } = await supabase().from('tasks').upsert(taskToRow(pid, t, sortOrder), { onConflict: 'project_id,client_id' });
+  if (error) throw error;
+}
+
+export async function saveSourceNow(x: any) {
+  const pid = activeProjectId(); if (!pid) return;
+  const { error } = await supabase().from('sources').upsert({
+    project_id: pid, client_id: x.id, title: x.title ?? '', authors: x.authors ?? '',
+    year: x.year ?? '', venue: x.venue ?? '', doi: x.doi ?? '', url: x.url ?? '',
+    objective: x.objective ?? null, method: x.method ?? '', findings: x.findings ?? null,
+    limitations: x.limitations ?? '', relevance: x.relevance ?? '', section: x.section ?? '',
+    status: x.status ?? '', verified: !!x.verified, citation: x.citation ?? '', notes: x.notes ?? '',
+  }, { onConflict: 'project_id,client_id' });
+  if (error) throw error;
+}
+
+export async function savePolicyNow(p: any) {
+  const pid = activeProjectId(); if (!pid) return;
+  const { error } = await supabase().from('policies').upsert({
+    project_id: pid, name: p.name, trigger: p.trigger ?? '', behavior: p.behavior ?? '', approval: p.approval ?? '',
+  }, { onConflict: 'project_id,name' });
+  if (error) throw error;
+}
+
+export async function saveProjectMetaNow(title: string, deadline: string, notes: string) {
+  const pid = activeProjectId(); if (!pid) return;
+  const { error } = await supabase().from('projects').update({
+    title, deadline: deadline || null, notes,
+  }).eq('id', pid);
+  if (error) throw error;
+}
+
+export async function saveReadinessNow(itemIndex: number, checked: boolean) {
+  const pid = activeProjectId(); if (!pid) return;
+  const { error } = await supabase().from('readiness_checks').upsert({
+    project_id: pid, item_index: itemIndex, checked,
+  }, { onConflict: 'project_id,item_index' });
+  if (error) throw error;
+}
