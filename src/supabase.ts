@@ -207,13 +207,22 @@ function activeProjectId(): string {
   return (import.meta.env.VITE_SUPABASE_PROJECT_ID as string | undefined) || '';
 }
 
-export async function saveChapterNow(ch: any) {
+export async function saveChapterNow(ch: any, sortOrder?: number) {
   const pid = activeProjectId(); if (!pid) return;
-  const { error } = await supabase().from('chapters').upsert({
+  const row: Row = {
     project_id: pid, client_id: ch.id, label: ch.label ?? '', title: ch.title ?? '',
     purpose: ch.purpose ?? '', status: ch.status ?? 'Belum Ditulis', draft: ch.draft ?? '',
     checklist: ch.checklist ?? [], comment: ch.comment ?? '',
-  }, { onConflict: 'project_id,client_id' });
+  };
+  if (typeof sortOrder === 'number') row.sort_order = sortOrder;
+  const { error } = await supabase().from('chapters').upsert(row, { onConflict: 'project_id,client_id' });
+  if (error) throw error;
+}
+
+export async function deleteChapterNow(clientId: string) {
+  const pid = activeProjectId(); if (!pid) return;
+  const { error } = await supabase().from('chapters').delete()
+    .eq('project_id', pid).eq('client_id', clientId);
   if (error) throw error;
 }
 
