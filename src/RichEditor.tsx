@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState } from 'react';
-import { Bold, Italic, Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight, AlignJustify, List, ListOrdered, Link2, Type, Palette, Highlighter, ChevronDown, Undo2, Redo2, Heading1, Heading2, Heading3, IndentIncrease, IndentDecrease, Quote, Code, Pilcrow } from 'lucide-react';
+import { Bold, Italic, Underline, Strikethrough, AlignLeft, AlignCenter, AlignRight, AlignJustify, List, ListOrdered, Link2, Type, Palette, Highlighter, ChevronDown, Undo2, Redo2, Heading1, Heading2, Heading3, IndentIncrease, IndentDecrease, Quote, Code, Pilcrow, Table as TableIcon, Trash2, Plus as PlusIcon, Minus as MinusIcon } from 'lucide-react';
 
 type RichEditorProps = {
   value: string;
@@ -57,7 +57,7 @@ function normalize(html: string): string {
   const textOnly = clean.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
   if (!textOnly) return '';
   // Plain text / inline-only markup -> wrap in a paragraph so blocks behave like Word.
-  if (!/<(p|div|h[1-6]|ul|ol|blockquote|pre|li)\b/i.test(clean)) {
+  if (!/<(p|div|h[1-6]|ul|ol|blockquote|pre|li|table|thead|tbody|tr|td|th)\b/i.test(clean)) {
     return `<p>${clean}</p>`;
   }
   return clean;
@@ -173,6 +173,106 @@ export function RichEditor({ value, onChange, placeholder }: RichEditorProps) {
     }
     setShowHighlightMenu(false);
   };
+
+  // --- Table helpers ---
+  const getCell = (): HTMLTableCellElement | null => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    let node: Node | null = sel.getRangeAt(0).startContainer;
+    while (node) {
+      if (node instanceof HTMLTableCellElement) return node;
+      node = node.parentNode;
+    }
+    return null;
+  };
+
+  const insertTable = (rows: number, cols: number) => {
+    let html = '<table><thead><tr>';
+    for (let c = 0; c < cols; c++) html += '<th>Header ' + (c + 1) + '</th>';
+    html += '</tr></thead><tbody>';
+    for (let r = 0; r < rows; r++) {
+      html += '<tr>';
+      for (let c = 0; c < cols; c++) html += '<td>&nbsp;</td>';
+      html += '</tr>';
+    }
+    html += '</tbody></table><p><br></p>';
+    exec('insertHTML', html);
+    setShowTableMenu(false);
+    setTableHover({ r: 0, c: 0 });
+  };
+
+  const tableAction = (action: 'addRowAbove' | 'addRowBelow' | 'addColLeft' | 'addColRight' | 'delRow' | 'delCol' | 'delTable') => {
+    const cell = getCell();
+    if (!cell) return;
+    const row = cell.parentElement as HTMLTableRowElement;
+    const table = row.closest('table')!;
+    const tbody = table.querySelector('tbody') || table;
+    const cellIdx = Array.from(row.cells).indexOf(cell);
+    const rows = Array.from(tbody.querySelectorAll(':scope > tr')) as HTMLTableRowElement[];
+
+    switch (action) {
+      case 'addRowAbove':
+      case 'addRowBelow': {
+        const ref = action === 'addRowAbove' ? row : row.nextSibling as HTMLTableRowElement | null;
+        const newRow = document.createElement('tr');
+        for (let c = 0; c < row.cells.length; c++) {
+          const td = document.createElement('td');
+          td.innerHTML = '&nbsp;';
+          newRow.appendChild(td);
+        }
+        tbody.insertBefore(newRow, ref);
+        break;
+      }
+      case 'addColLeft':
+      case 'addColRight': {
+        const offset = action === 'addColLeft' ? 0 : 1;
+        // Header
+        const headRow = table.querySelector('thead tr') as HTMLTableRowElement | null;
+        if (headRow) {
+          const th = document.createElement('th');
+          th.textContent = 'Header';
+          headRow.insertBefore(th, headRow.cells[cellIdx + offset] || null);
+        }
+        // Body rows
+        rows.forEach(r => {
+          const td = document.createElement('td');
+          td.innerHTML = '&nbsp;';
+          r.insertBefore(td, r.cells[cellIdx + offset] || null);
+        });
+        break;
+      }
+      case 'delRow': {
+        if (rows.length > 1) row.remove();
+        else table.remove();
+        break;
+      }
+      case 'delCol': {
+        const headRow = table.querySelector('thead tr') as HTMLTableRowElement | null;
+        if (headRow) headRow.deleteCell(cellIdx);
+        rows.forEach(r => r.deleteCell(cellIdx));
+        if (headRow && headRow.cells.length === 0) table.remove();
+        break;
+      }
+      case 'delTable': {
+        table.remove();
+        break;
+      }
+    }
+    emit();
+  };
+
+  const [showTableMenu, setShowTableMenu] = useState(false);
+  const [tableHover, setTableHover] = useState({ r: 0, c: 0 });
+  const [inTable, setInTable] = useState(false);
+
+  // Track whether cursor is inside a table cell
+  useEffect(() => {
+    const check = () => {
+      setInTable(!!getCell());
+    };
+    document.addEventListener('selectionchange', check);
+    return () => document.removeEventListener('selectionchange', check);
+  }, []);
 
   return (
     <div className="rich-editor">
@@ -329,11 +429,68 @@ export function RichEditor({ value, onChange, placeholder }: RichEditorProps) {
             <button type="button" onClick={insertLink} title="Sisipkan tautan" className="ribbon-btn">
               <Link2 size={16} />
             </button>
+            <div className="ribbon-dropdown">
+              <button type="button" onClick={() => setShowTableMenu(!showTableMenu)} className="ribbon-btn" title="Sisipkan tabel">
+                <TableIcon size={16} />
+                <ChevronDown size={11} />
+              </button>
+              {showTableMenu && (
+                <div className="ribbon-menu table-menu">
+                  <div className="table-grid" onMouseLeave={() => setTableHover({ r: 0, c: 0 })}>
+                    {Array.from({ length: 6 }, (_, r) =>
+                      Array.from({ length: 6 }, (_, c) => (
+                        <button
+                          key={`${r}-${c}`}
+                          type="button"
+                          className={`table-cell ${tableHover.r > r && tableHover.c > c ? 'active' : ''}`}
+                          onMouseEnter={() => setTableHover({ r: r + 1, c: c + 1 })}
+                          onClick={() => insertTable(r + 1, c + 1)}
+                          aria-label={`Tabel ${r + 1} x ${c + 1}`}
+                        />
+                      ))
+                    )}
+                  </div>
+                  <div className="table-size-label">
+                    {tableHover.r > 0 && tableHover.c > 0 ? `${tableHover.r} x ${tableHover.c}` : 'Pilih ukuran'}
+                  </div>
+                </div>
+              )}
+            </div>
             <button type="button" onClick={() => exec('removeFormat')} title="Hapus format" className="ribbon-btn">
               Clear
             </button>
           </div>
         </div>
+
+        {/* Table (visible when cursor is inside a table) */}
+        {inTable && (
+          <div className="ribbon-group ribbon-table-group">
+            <span className="ribbon-label">Table</span>
+            <div className="ribbon-buttons">
+              <button type="button" onClick={() => tableAction('addRowAbove')} title="Baris di atas" className="ribbon-btn">
+                <PlusIcon size={14} /> <span className="btn-text">Baris↑</span>
+              </button>
+              <button type="button" onClick={() => tableAction('addRowBelow')} title="Baris di bawah" className="ribbon-btn">
+                <PlusIcon size={14} /> <span className="btn-text">Baris↓</span>
+              </button>
+              <button type="button" onClick={() => tableAction('addColLeft')} title="Kolom kiri" className="ribbon-btn">
+                <PlusIcon size={14} /> <span className="btn-text">Kolom←</span>
+              </button>
+              <button type="button" onClick={() => tableAction('addColRight')} title="Kolom kanan" className="ribbon-btn">
+                <PlusIcon size={14} /> <span className="btn-text">Kolom→</span>
+              </button>
+              <button type="button" onClick={() => tableAction('delRow')} title="Hapus baris" className="ribbon-btn">
+                <MinusIcon size={14} /> <span className="btn-text">Baris</span>
+              </button>
+              <button type="button" onClick={() => tableAction('delCol')} title="Hapus kolom" className="ribbon-btn">
+                <MinusIcon size={14} /> <span className="btn-text">Kolom</span>
+              </button>
+              <button type="button" onClick={() => tableAction('delTable')} title="Hapus tabel" className="ribbon-btn ribbon-btn-danger">
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div
