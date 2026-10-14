@@ -11,7 +11,7 @@
 
 -- ---------- 1. Assign owner project (WAJIB — owner_id saat ini NULL) ----------
 update public.projects
-set owner_id = '<PASTE_USER_UUID>'
+set owner_id = '1aec4fbc-dc2f-479c-b5fd-fe5bcf5b206b'
 where id = '320b049b-3e40-44aa-9a12-b453145b18ae';
 
 -- ---------- 2. Hapus policy publik (yang dibuat 003_anon_access.sql) ----------
